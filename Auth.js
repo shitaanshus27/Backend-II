@@ -1,119 +1,45 @@
-const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 const dotenv = require("dotenv");
-const bcrypt = require("bcryptjs");
 
 dotenv.config();
 
-exports.signup = async (req, res) => {
+exports.auth = async (req, res, next) => {
   try {
-    const {
-      firstName,
-      lastName,
-      email,
-      password,
-      confirmPassword,
-      accountType,
-    } = req.body;
-
-    if (
-      !firstName ||
-      !lastName ||
-      !email ||
-      !password ||
-      !confirmPassword ||
-      !accountType
-    ) {
-      return res.status(403).send({
-        success: false,
-        message: "All Fields are required",
-      });
+    const token = req.header("Authorization").replace("Bearer ", "");
+    console.log(token);
+    if (!token) {
+      return res.status(401).json({ success: false, message: `Token Missing` });
     }
-
-    if (password !== confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Password and Confirm Password do not match. Please try again.",
-      });
+    try {
+      const decode = await jwt.verify(token, process.env.JWT_SECRET);
+      console.log(decode);
+      req.user = decode;
+    } catch (error) {
+      return res
+        .status(401)
+        .json({ success: false, message: "token is invalid" });
     }
-
-    const existingUser = await User.findOne({ email });
-
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "User already exists. Please sign in to continue.",
-      });
-    }
-
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const user = await User.create({
-      firstName,
-      lastName,
-      email,
-      password: hashedPassword,
-      accountType,
-    });
-
-    return res.status(200).json({
-      success: true,
-      user,
-      message: "User registered successfully",
-    });
+    next();
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({
+    console.log(error);
+    return res.status(401).json({
       success: false,
-      message: "User cannot be registered. Please try again.",
+      message: `Something Went Wrong While Validating the Token`,
     });
   }
 };
 
-exports.login = async (req, res) => {
+exports.isStudent = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { accountType } = req.user;
 
-    console.log(email);
-    console.log(password);
-
-    if (!email || !password) {
-      return res.status(400).json({
+    if (accountType != "STUDENT") {
+      res.status(401).json({
         success: false,
-        message: `Please Fill up All the Required Fields`,
+        message: "Yeh Student ke liye hai sir",
       });
     }
-    const user = await User.findOne({ email });
-
-    console.log(user);
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: `User is not Registered with Us Please SignUp to Continue`,
-      });
-    }
-
-    if (await bcrypt.compare(password, user.password)) {
-      const token = jwt.sign(
-        { email: user.email, id: user._id, accountType: user.accountType },
-        process.env.JWT_SECRET,
-        {
-          expiresIn: "24h",
-        }
-      );
-      return res.status(200).json({
-        success: true,
-        token,
-      });
-    } else {
-      return res.status(401).json({
-        success: false,
-        message: `Password is incorrect`,
-      });
-    }
+    next();
   } catch (error) {
     console.error(error);
     return res.status(500).json({
@@ -123,30 +49,22 @@ exports.login = async (req, res) => {
   }
 };
 
-exports.InstructorDash = async (req, res) => {
+exports.isInstructor = async (req, res, next) => {
   try {
-    return res.status(200).json({
-      success: true,
-      message: "Welcome To Instuctor Section",
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Something Went Wrong. Please try again.",
-    });
-  }
-};
+    const { accountType } = req.user;
 
-exports.StudentDash = async (req, res) => {
-  try {
-    return res.status(200).json({
-      success: true,
-      message: "Welcome To Student Section",
-    });
+    if (accountType != "Instructor") {
+      res.status(401).json({
+        success: false,
+        message: "Bakchodi Mat Kar Sir hun main",
+      });
+    }
+    next();
   } catch (error) {
+    console.error(error);
     return res.status(500).json({
       success: false,
-      message: "Something Went Wrong. Please try again.",
+      message: `Login Failure Please Try Again`,
     });
   }
 };
